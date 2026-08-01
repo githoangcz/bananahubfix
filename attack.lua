@@ -6,7 +6,7 @@ local LocalPlayer = Players.LocalPlayer
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 
-getgenv().AttackRange = 35
+getgenv().AttackRange = 80
 
 task.spawn(function()
     while task.wait(0.05) do
