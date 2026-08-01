@@ -34,3 +34,12 @@ task.spawn(function()
         end)
     end
 end)
+
+local function claimDLC()
+    pcall(function()
+        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer("Cousin", "DLCBoxData")
+    end)
+end
+
+claimDLC()
+while task.wait(3600) do claimDLC() end
