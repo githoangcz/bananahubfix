@@ -1,33 +1,26 @@
--- Auto Attack Full - Không log
+-- Auto Attack cho Sea 3 (dùng Remote "114")
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
 local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
-local RegisterAttack = Net:WaitForChild("RE/RegisterAttack")
-local RegisterHit = Net:WaitForChild("RE/RegisterHit")
-local SegmentHit = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("SegmentHit")
+local Remote = ReplicatedStorage:WaitForChild("Util"):WaitForChild("114")
 
 local ATTACK_RANGE = 30
-local COOLDOWN = 0.15
+local COOLDOWN = 0.2
 local active = true
 
 local function getEnemies()
     local list = {}
-    local containers = {workspace.Enemies, workspace._WorldOrigin and workspace._WorldOrigin.EnemySpawns}
-    for _, c in ipairs(containers) do
-        if c then
-            for _, v in ipairs(c:GetChildren()) do
-                if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") then
-                    table.insert(list, v)
-                end
+    local container = workspace:FindFirstChild("Enemies")
+    if container then
+        for _, v in ipairs(container:GetChildren()) do
+            if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") then
+                table.insert(list, v)
             end
         end
     end
@@ -53,18 +46,23 @@ end
 
 local function attack(target)
     if not target then return end
-    local hrp = target:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    local pos = hrp.Position
-    local dist = (pos - HumanoidRootPart.Position).Magnitude
-    if dist > ATTACK_RANGE then
+    local part = target:FindFirstChild("HumanoidRootPart") or target:FindFirstChild("RightUpperLeg")
+    if not part then return end
+    local pos = part.Position
+    if (pos - HumanoidRootPart.Position).Magnitude > ATTACK_RANGE then
         Humanoid:MoveTo(pos)
         return
     end
     Humanoid:MoveTo(HumanoidRootPart.Position)
-    RegisterAttack:FireServer(pos)
-    RegisterHit:FireServer(pos)
-    SegmentHit:FireServer(target)
+
+    local args = {
+        "W@*W`blvq`wMlq",
+        LocalPlayer.UserId,
+        part,
+        {},
+        [6] = "1279ede2"
+    }
+    Remote:FireServer(unpack(args))
 end
 
 coroutine.wrap(function()
@@ -87,11 +85,12 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.G then
         active = not active
-        if not active then Humanoid:MoveTo(HumanoidRootPart.Position) end
+        if not active then
+            Humanoid:MoveTo(HumanoidRootPart.Position)
+        end
     end
 end)
 
--- Xử lý nhân vật mới
 LocalPlayer.CharacterAdded:Connect(function(char)
     Character = char
     Humanoid = char:WaitForChild("Humanoid")
