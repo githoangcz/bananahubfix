@@ -1,147 +1,99 @@
--- ============================================
--- AUTO STATS + AUTO DLCBOX + AUTO ATTACK
--- ============================================
-
+-- Auto Attack Full - Không log
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
-local CommF_ = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
-local Remotes = ReplicatedStorage:WaitForChild("Remotes")
-local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
-local MAX_STAT = 2800
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
+local RegisterAttack = Net:WaitForChild("RE/RegisterAttack")
+local RegisterHit = Net:WaitForChild("RE/RegisterHit")
+local SegmentHit = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("SegmentHit")
 
--- ===== CHỜ DATA LOAD =====
-local function waitForData()
-    while not pcall(function()
-        local _ = LocalPlayer.Data.Stats.Melee.Level.Value
-    end) do
-        task.wait(0.5)
-    end
-end
+local ATTACK_RANGE = 30
+local COOLDOWN = 0.15
+local active = true
 
-waitForData()
-print("[Script] Data đã load xong")
-
--- ===== HELPERS =====
-local function getPoints()
-    local ok, val = pcall(function() return LocalPlayer.Data.Points.Value end)
-    return ok and val or 0
-end
-
-local function getStat(name)
-    local ok, val = pcall(function() return LocalPlayer.Data.Stats[name].Level.Value end)
-    return ok and val or 0
-end
-
-local function addPoint(stat, amount)
-    pcall(function()
-        CommF_:InvokeServer("AddPoint", stat, amount)
-    end)
-    task.wait(0.3) -- tránh throttle
-end
-
--- ===== AUTO STATS =====
-task.spawn(function()
-    while task.wait(2) do
-        pcall(function()
-            local points = getPoints()
-            if points <= 0 then return end
-
-            local melee = getStat("Melee")
-            local defense = getStat("Defense")
-            local sword = getStat("Sword")
-
-            if melee < MAX_STAT then
-                local amt = math.min(MAX_STAT - melee, points)
-                if amt > 0 then
-                    addPoint("Melee", amt)
-                    print("[Stats] Melee: " .. getStat("Melee") .. "/" .. MAX_STAT)
-                end
-            elseif defense < MAX_STAT then
-                local amt = math.min(MAX_STAT - defense, points)
-                if amt > 0 then
-                    addPoint("Defense", amt)
-                    print("[Stats] Defense: " .. getStat("Defense") .. "/" .. MAX_STAT)
-                end
-            elseif sword < MAX_STAT then
-                local amt = math.min(MAX_STAT - sword, points)
-                if amt > 0 then
-                    addPoint("Sword", amt)
-                    print("[Stats] Sword: " .. getStat("Sword") .. "/" .. MAX_STAT)
+local function getEnemies()
+    local list = {}
+    local containers = {workspace.Enemies, workspace._WorldOrigin and workspace._WorldOrigin.EnemySpawns}
+    for _, c in ipairs(containers) do
+        if c then
+            for _, v in ipairs(c:GetChildren()) do
+                if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") then
+                    table.insert(list, v)
                 end
             end
-        end)
+        end
     end
-end)
+    return list
+end
 
--- ===== AUTO DLCBOX (MỖI 15 PHÚT) =====
-task.spawn(function()
+local function getNearest()
+    local enemies = getEnemies()
+    local nearest, minDist = nil, math.huge
+    local rootPos = HumanoidRootPart.Position
+    for _, e in ipairs(enemies) do
+        local hrp = e:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local d = (hrp.Position - rootPos).Magnitude
+            if d < minDist then
+                minDist = d
+                nearest = e
+            end
+        end
+    end
+    return nearest, minDist
+end
+
+local function attack(target)
+    if not target then return end
+    local hrp = target:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local pos = hrp.Position
+    local dist = (pos - HumanoidRootPart.Position).Magnitude
+    if dist > ATTACK_RANGE then
+        Humanoid:MoveTo(pos)
+        return
+    end
+    Humanoid:MoveTo(HumanoidRootPart.Position)
+    RegisterAttack:FireServer(pos)
+    RegisterHit:FireServer(pos)
+    SegmentHit:FireServer(target)
+end
+
+coroutine.wrap(function()
     while true do
-        pcall(function()
-            CommF_:InvokeServer("Cousin", "DLCBoxData")
-            print("[DLCBox] Đã claim")
-        end)
-        task.wait(900)
+        if active then
+            local target, dist = getNearest()
+            if target and dist < ATTACK_RANGE + 15 then
+                attack(target)
+            else
+                Humanoid:MoveTo(HumanoidRootPart.Position)
+            end
+            task.wait(COOLDOWN)
+        else
+            task.wait(0.5)
+        end
+    end
+end)()
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.G then
+        active = not active
+        if not active then Humanoid:MoveTo(HumanoidRootPart.Position) end
     end
 end)
 
--- ===== AUTO ATTACK =====
--- Dùng cooldown để tránh server throttle
-local lastAttack = 0
-local ATTACK_COOLDOWN = 0.3 -- giây giữa mỗi lần fire
-
-task.spawn(function()
-    while task.wait(0.1) do
-        local char = LocalPlayer.Character
-        if not char then continue end
-
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChild("Humanoid")
-        if not hrp or not hum or hum.Health <= 0 then continue end
-
-        local now = tick()
-        if now - lastAttack < ATTACK_COOLDOWN then continue end
-
-        pcall(function()
-            local enemyFolder = Workspace:FindFirstChild("Enemies")
-            if not enemyFolder then return end
-
-            local range = getgenv().AttackRange or 60
-            local hit = false
-
-            for _, enemy in ipairs(enemyFolder:GetChildren()) do
-                if not enemy:IsA("Model") then continue end
-
-                local eHRP = enemy:FindFirstChild("HumanoidRootPart")
-                local eHum = enemy:FindFirstChild("Humanoid")
-                if not eHRP or not eHum or eHum.Health <= 0 then continue end
-
-                local dist = (hrp.Position - eHRP.Position).Magnitude
-                if dist <= range then
-                    -- Enlarge hitbox
-                    eHRP.Size = Vector3.new(10, 10, 10)
-                    eHRP.Transparency = 1
-
-                    -- Fire từng remote có delay nhỏ
-                    Net["RE/RegisterAttack"]:FireServer()
-                    task.wait(0.05)
-                    Net["RE/RegisterHit"]:FireServer(eHRP)
-                    task.wait(0.05)
-                    Remotes.SegmentHit:FireServer(enemy)
-
-                    hit = true
-                end
-            end
-
-            if hit then
-                lastAttack = tick()
-            end
-        end)
-    end
+-- Xử lý nhân vật mới
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character = char
+    Humanoid = char:WaitForChild("Humanoid")
+    HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
 end)
-
-print("[Script] Đã khởi động xong!")
